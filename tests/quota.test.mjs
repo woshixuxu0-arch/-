@@ -12,12 +12,12 @@ test('北京时间日期边界和 IPv6 /64 归一化',()=>{
   assert.equal(networkPrefix('2001:db8::1'),networkPrefix('2001:0db8:0000:0000:1111:2222:3333:4444'));
   assert.equal(networkPrefix('999.1.1.1'),null);
 });
-test('缺少额度绑定或计数服务失败时不得调用 Dify',async()=>{
+test('缺少额度绑定或计数服务失败时不得调用 Dify 工作流',async()=>{
   let calls=0;
   const req=()=>new Request('https://jobfit.test/api/analyze',{method:'POST',headers:{'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify({resume:'r'.repeat(25),job_description:'j'.repeat(25),consent:true})});
   const env={DIFY_API_URL:'https://api.dify.ai/v1',DIFY_API_KEY:'synthetic-test-key'};
-  assert.equal((await handleApi(req(),env,()=>{calls++;})).status,503);
-  assert.equal((await handleApi(req(),{...env,QUOTA_LEDGER:{idFromName:()=>0,get:()=>({fetch:()=>{throw Error();}})}},()=>{calls++;})).status,503);
+  assert.equal((await handleApi(req(),env,(url,options)=>{if(options.method==='POST')calls++;return Response.json({user_input_form:[]});})).status,503);
+  assert.equal((await handleApi(req(),{...env,QUOTA_LEDGER:{idFromName:()=>0,get:()=>({fetch:()=>{throw Error();}})}},(url,options)=>{if(options.method==='POST')calls++;return Response.json({user_input_form:[]});})).status,503);
   assert.equal(calls,0);
 });
 test('真实 SQLite Durable Object：并发硬上限、身份防绕过、重启后保留计数',async()=>{

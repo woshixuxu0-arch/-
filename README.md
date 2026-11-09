@@ -1,4 +1,4 @@
-# JobFit AI H5 · v2.0.1
+# JobFit AI H5 · v2.0.2
 
 原项目升级，生产 Worker 仍为 `worker`，仓库仍为 `woshixuxu0-arch/-`。不创建新网站、不修改原来的独立 Sites 演示站。Dify 工作流输入继续使用 `resume`、`job_description`，输出使用 `result`。
 
@@ -60,7 +60,7 @@
 
 唯一必需的敏感变量仍是 **运行时 Secret `DIFY_API_KEY`**，在 Cloudflare `worker → 设置 → 运行时变量和密钥 → 生产` 中由所有者自行填写。不要填到构建变量、前端、代码仓库或聊天。已有的 Secret 会由 Wrangler 保留，本升级不读取或改写它。
 
-`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.0.1"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
+`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.0.2"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
 
 迁移若因 Cloudflare 账户权限 / 配额受阻，不应移除计数器强行发布。修复账户绑定后重试构建即可；计数不可用时真实 AI 保持停止。
 
@@ -87,3 +87,13 @@ Node.js 22+；先 `npm ci`，再 `npm start`。本地使用 Miniflare / workerd 
 PDF 主模块与后台 Worker 统一使用官方 legacy 构建，为缺少 Uint8Array.toHex / Base64、Promise.withResolvers、Map.getOrInsertComputed 等新接口的手机补齐兼容支持。Worker 使用新文件路径，避免复用旧版资源。遇到解析器内部异常时提供中文重试 / 粘贴文本提示。
 
 `LEGACY_BROWSER_TEST=1 npm run test:browser` 在页面和 PDF Worker 中移除上述新版接口，验证文字 PDF、扫描 PDF、OCR 和导入预览；保留原隐私规则、额度和 Secret 配置。
+
+## v2.0.2 Dify 输入与错误诊断
+
+新增只读 `/api/input-limits`。服务端使用现有 Secret 读取 Dify `/parameters`，仅向浏览器返回 resume、job_description 的数值长度限制，绝不返回默认值、凭据或原始工作流配置。元数据读取不运行模型、不消耗本站 AI 次数；短期缓存最多 60 秒。无法读取时明确标记使用站点上限，不能把它当作 Dify 已确认上限。
+
+前后端均检查已经确认的 Dify 上限；超长内容在扣额度和调用工作流前拒绝，已有输入不静默截断。Dify 参数、认证、额度、未发布、上游异常分别提供固定中文提示与安全错误代码，不透传可能含个人内容的原始上游报错。
+
+若 Dify 中变量上限低于实际简历需求，需在 Dify 工作流起始节点提高 resume / job_description 的最大长度，并重新发布；本站不拥有 Dify 编辑权限，无法通过运行 API 修改工作流。修改发布后最多等一分钟刷新，或重新打开网页。
+
+`node scripts/input-limits-browser-check.mjs` 验证手机页面的上限同步、超长拦截、保留原文及中文错误。读取参数接口不代表 AI 调用成功，真实执行仍受原有 3 / 30 次硬额度保护。

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {handleApi,mockReport} from '../src/api.mjs';
+import {handleApi as realHandleApi,mockReport} from '../src/api.mjs';
+const handleApi=(request,env,fetcher)=>realHandleApi(request,env,fetcher?((url,options)=>options.method==='GET'?Promise.resolve(Response.json({user_input_form:[]})):fetcher(url,options)):undefined);
 const env = {DIFY_API_URL:'https://api.dify.ai/v1',DIFY_API_KEY:'test-server-secret',QUOTA_LEDGER:{idFromName:()=>0,get:()=>({fetch:async()=>Response.json({quota:{globalUsed:1}})})}};
 const input = {resume:'真实简历内容与工作经历'.repeat(5),job_description:'岗位要求与工作职责描述'.repeat(5),consent:true};
 const post = (body=input,headers={}) => new Request('https://jobfit.test/api/analyze',{method:'POST',headers:{'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1',...headers},body:JSON.stringify(body)});

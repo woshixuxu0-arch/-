@@ -1,5 +1,6 @@
 import {importErrorMessage} from './import-errors.js';
 const $ = (id) => document.getElementById(id);
+let inputLimits={resume:20000,job_description:20000};
 const titles = ['岗位匹配', '个人优势', '主要不足', '简历优化建议', '下一步行动'];
 let mode = 'mock', ready = false, controller, reportText = '', revision = 0, importController, importTarget;
 const example = {
@@ -7,8 +8,8 @@ const example = {
   job_description: '【虚构示例岗位】产品运营助理\n岗位职责：参与用户运营与活动策划，收集用户反馈，协助整理业务数据并输出复盘。\n任职要求：具备良好的沟通与文案能力，能够使用 Excel 整理数据，主动推进任务。\n加分项：了解用户分层与基础数据分析。'
 };
 function counts() {
-  $('resume-count').textContent = `${$('resume').value.length.toLocaleString()} / 20,000`;
-  $('job-count').textContent = `${$('job_description').value.length.toLocaleString()} / 20,000`;
+  $('resume-count').textContent = `${$('resume').value.length.toLocaleString()} / ${inputLimits.resume.toLocaleString()}`;
+  $('job-count').textContent = `${$('job_description').value.length.toLocaleString()} / ${inputLimits.job_description.toLocaleString()}`;
 }
 function invalidate() {
   revision++; counts();
@@ -60,7 +61,7 @@ $('analysis-form').addEventListener('submit', async event => {
   let firstInvalid;
   for (const [input, error, label] of [['resume','resume-error','个人简历'],['job_description','job-error','岗位要求']]) {
     const length = $(input).value.trim().length;
-    const message = length < 20 ? `请填写至少 20 个字符的${label}，以便获得有效分析。` : length > 20000 ? `${label}请控制在 20,000 个字符以内。` : '';
+    const message = length < 20 ? `请填写至少 20 个字符的${label}，以便获得有效分析。` : length > inputLimits[input] ? `${label}请控制在 ${inputLimits[input].toLocaleString()} 个字符以内（当前工作流上限）。` : '';
     $(error).textContent = message; $(error).hidden = !message;
     if (message) { $(input).setAttribute('aria-invalid','true'); firstInvalid ||= $(input); } else $(input).removeAttribute('aria-invalid');
   }
@@ -74,7 +75,7 @@ $('analysis-form').addEventListener('submit', async event => {
     const payload = mode === 'mock' ? {} : {resume:$('resume').value.trim(), job_description:$('job_description').value.trim(), consent:$('consent').checked};
     const response = await fetch('/api/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), signal:controller.signal, cache:'no-store'});
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || '暂时无法完成分析，请稍后重试。');
+    if (!response.ok) {if(data.limits)applyInputLimits({limits:data.limits,source:'dify'});throw new Error(data.error || '暂时无法完成分析，请稍后重试。');}
     if (current !== revision) throw new Error('分析期间输入已改变，请重新分析。');
     renderReport(data.result, data.mode === 'mock');
   } catch(error) {
@@ -106,6 +107,7 @@ async function configure() {
       $('privacy-description').textContent = '本应用不持久化保存简历；Dify 及模型服务可能保留运行记录。刷新页面可清空当前内容。';
       $('consent-row').hidden = false;
     }
+    if(mode==='live')await refreshInputLimits();
     busy(false);
   } catch { $('global-error').textContent = '无法获取服务状态，请刷新页面重试。'; $('global-error').hidden = false; }
 }
@@ -130,8 +132,9 @@ $('close-preview').addEventListener('click',closeImport);
 preview.addEventListener('cancel',event=>{event.preventDefault();closeImport();});
 function previewCount() {
   const length=$('preview-text').value.trim().length;
-  $('preview-count').textContent=`${length.toLocaleString()} / 20,000 字符${length>20000?'，请删减后确认':''}`;
-  $('confirm-file').disabled=Boolean(importController)||length<1||length>20000;
+  const max=inputLimits[importTarget] || 20000;
+  $('preview-count').textContent=`${length.toLocaleString()} / ${max.toLocaleString()} 字符${length>max?'，超出当前工作流上限，请删减后确认':''}`;
+  $('confirm-file').disabled=Boolean(importController)||length<1||length>max;
 }
 $('preview-text').addEventListener('input',previewCount);
 for(const button of document.querySelectorAll('[data-upload]')) {
@@ -158,3 +161,16 @@ $('confirm-file').addEventListener('click',()=>{
   if(importController || $('confirm-file').disabled)return;
   $(importTarget).value=$('preview-text').value.trim();$(importTarget).dispatchEvent(new Event('input',{bubbles:true}));const target=$(importTarget);closeImport();target.focus();
 });
+
+function applyInputLimits(data) {
+  for(const key of ['resume','job_description']) {
+    const limit=data.limits?.[key];if(Number.isInteger(limit)&&limit>=1&&limit<=20000){inputLimits[key]=limit;$(key).maxLength=limit;}
+  }
+  counts();
+  const text=data.source==='dify'?`当前 Dify 工作流输入上限：简历 ${inputLimits.resume.toLocaleString()} 字符，岗位要求 ${inputLimits.job_description.toLocaleString()} 字符。超长请精简，或由管理员提高工作流变量上限并重新发布。`:'暂未读取到 Dify 变量限制；站点最多支持每项 20,000 字符，Dify 可能另有更低上限。';
+  $('workflow-limits').textContent=text;$('workflow-limits').hidden=false;
+}
+async function refreshInputLimits() {
+  try {const res=await fetch('/api/input-limits',{cache:'no-store'});if(!res.ok)throw Error();applyInputLimits(await res.json());}
+  catch {applyInputLimits({limits:inputLimits,source:'site'});}
+}

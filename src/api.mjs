@@ -1,4 +1,5 @@
 import {quotaFor} from './quota.mjs';
+import {readInputLimits,SITE_LIMITS,FIELD_LABELS,classifyDifyFailure} from './dify.mjs';
 export const titles = ['岗位匹配', '个人优势', '主要不足', '简历优化建议', '下一步行动'];
 export const mockReport = {
   岗位匹配: '【结构示例，非个人评估】\n真实报告应逐项对照岗位要求与简历原文，说明已有证据、尚缺证据及不能判断的部分。不在缺少依据时给出匹配分数。',
@@ -33,7 +34,11 @@ function parseResult(value) {
 }
 export async function handleApi(request, env = {}, fetcher = fetch) {
   const path = new URL(request.url).pathname;
-  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.0.1'}) : json({error:'请求方法不受支持。'},405);
+  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.0.2'}) : json({error:'请求方法不受支持。'},405);
+  if(path === '/api/input-limits'){
+    if(request.method!=='GET')return json({error:'请求方法不受支持。'},405);
+    return json(await readInputLimits(env,fetcher) || {limits:SITE_LIMITS,source:'site',confirmedFields:[]});
+  }
   if (path === '/api/usage') {
     if(request.method!=='GET') return json({error:'请求方法不受支持。'},405);
     try {return await quotaFor(request,env,'usage');} catch {return json({error:'额度保护尚未就绪，真实分析暂不可用。'},503);}
@@ -61,6 +66,10 @@ export async function handleApi(request, env = {}, fetcher = fetch) {
   if (input.consent !== true) return json({error:'提交前需要同意本次数据处理。'},400);
   let base;
   try { base = new URL(env.DIFY_API_URL); if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) throw new Error(); } catch { return json({error:'服务端 Dify 地址配置有误，请联系管理员。'},503); }
+  const inputConfig=await readInputLimits(env,fetcher);
+  if(inputConfig)for(const key of Object.keys(SITE_LIMITS)){
+    if(input[key].trim().length>inputConfig.limits[key])return json({error:`${FIELD_LABELS[key]}超过当前 Dify 工作流的 ${inputConfig.limits[key].toLocaleString()} 字符上限。请精简内容，或由管理员提高该变量上限并重新发布工作流。`,code:'DIFY_INPUT_TOO_LONG',field:key,limits:inputConfig.limits},400);
+  }
   let quota,accounting;
   try {
     accounting=await quotaFor(request,env,'reserve');
@@ -79,12 +88,15 @@ export async function handleApi(request, env = {}, fetcher = fetch) {
     });
     if (response.status >= 300 && response.status < 400) return finish({error:'Dify 地址返回了重定向，请管理员检查 API 基础地址。'},502);
     if (!response.ok) {
-      if (response.status === 429) return finish({error:'分析服务繁忙或已达额度，请稍后重试。'},429);
-      if ([401,403].includes(response.status)) return finish({error:'Dify 服务认证失败，请管理员检查服务端密钥。'},502);
-      return finish({error:'Dify 暂时无法完成分析，请稍后重试。'},502);
+      let detail;try{detail=await response.json();}catch{}
+      const failure=classifyDifyFailure(response.status,detail);
+      return finish({error:failure.error,code:failure.code,upstreamStatus:response.status},failure.status);
     }
     const data = await response.json();
-    if (data.data?.status !== 'succeeded') return finish({error:'Dify 工作流执行未成功，请管理员检查工作流运行记录。'},502);
+    if (data.data?.status !== 'succeeded') {
+      const failure=classifyDifyFailure(200,{error:data.data?.error});
+      return finish({error:failure.error,code:failure.code},failure.status);
+    }
     const result = parseResult(data.data.outputs?.result);
     return finish({mode:'live',result});
   } catch(error) {
