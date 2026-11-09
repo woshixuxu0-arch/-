@@ -1,3 +1,4 @@
+import './pdf-compat.js';
 import {validateFile,checkDocxZip} from './file-rules.js';
 export async function extractFile(file,{signal,forceOCR=false,onProgress=()=>{}}={}) {
   let ocr,pdf,bitmap,loadingTask;
@@ -41,7 +42,8 @@ export async function extractFile(file,{signal,forceOCR=false,onProgress=()=>{}}
       return {text:await recognize(canvas),method:'本地中文 / 英文 OCR',scanned:1};
     }
     onProgress('正在本地加载 PDF…');
-    const pdfjs=await import('pdfjs-dist/build/pdf.mjs');check();pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker.min.mjs';
+    // 同时使用主线程与 Worker 的官方兼容构建，为旧手机补齐 toHex 等接口。
+    const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');check();pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker.legacy.min.mjs';
     const loading=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,cMapUrl:'/vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'/vendor/standard_fonts/',wasmUrl:'/vendor/pdf-wasm/'});
     loadingTask=loading;
     // 不显示或记录文档内容，密码保护文档不在本版支持范围内。

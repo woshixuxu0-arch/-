@@ -1,4 +1,4 @@
-# JobFit AI H5 · v2
+# JobFit AI H5 · v2.0.1
 
 原项目升级，生产 Worker 仍为 `worker`，仓库仍为 `woshixuxu0-arch/-`。不创建新网站、不修改原来的独立 Sites 演示站。Dify 工作流输入继续使用 `resume`、`job_description`，输出使用 `result`。
 
@@ -60,7 +60,7 @@
 
 唯一必需的敏感变量仍是 **运行时 Secret `DIFY_API_KEY`**，在 Cloudflare `worker → 设置 → 运行时变量和密钥 → 生产` 中由所有者自行填写。不要填到构建变量、前端、代码仓库或聊天。已有的 Secret 会由 Wrangler 保留，本升级不读取或改写它。
 
-`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.0.0"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
+`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.0.1"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
 
 迁移若因 Cloudflare 账户权限 / 配额受阻，不应移除计数器强行发布。修复账户绑定后重试构建即可；计数不可用时真实 AI 保持停止。
 
@@ -81,3 +81,9 @@ Node.js 22+；先 `npm ci`，再 `npm start`。本地使用 Miniflare / workerd 
 - 本地预览运行时，`CHROMIUM_PATH=/usr/bin/chromium node scripts/browser-check.mjs`：生成虚构 TXT、DOCX、文字 PDF、JPG、PNG、扫描 PDF，验证本地提取、预览确认、伪装格式拒绝、手机视口与不上传文件的网络断言。
 
 真实 Android 设备和不同字体 / 扫描质量仍需用户试用反馈。整个项目不含登录、收费或业务数据库功能；SQLite 仅用于额度与安全元数据。
+
+## v2.0.1 手机 PDF 兼容性修复
+
+PDF 主模块与后台 Worker 统一使用官方 legacy 构建，为缺少 Uint8Array.toHex / Base64、Promise.withResolvers、Map.getOrInsertComputed 等新接口的手机补齐兼容支持。Worker 使用新文件路径，避免复用旧版资源。遇到解析器内部异常时提供中文重试 / 粘贴文本提示。
+
+`LEGACY_BROWSER_TEST=1 npm run test:browser` 在页面和 PDF Worker 中移除上述新版接口，验证文字 PDF、扫描 PDF、OCR 和导入预览；保留原隐私规则、额度和 Secret 配置。

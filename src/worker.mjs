@@ -15,7 +15,7 @@ export default {async fetch(request,env) {
   }
   const res=new Response(response.body,response);
   for(const [key,value] of Object.entries(security)) res.headers.set(key,value);
-  res.headers.set('X-JobFit-Version','2.0.0');
+  res.headers.set('X-JobFit-Version','2.0.1');
   if(path.startsWith('/api/')||path==='/'||path.endsWith('.html')||path==='/app.js')res.headers.set('Cache-Control','no-store');
   return res;
 }};

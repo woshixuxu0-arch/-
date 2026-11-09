@@ -33,7 +33,7 @@ function parseResult(value) {
 }
 export async function handleApi(request, env = {}, fetcher = fetch) {
   const path = new URL(request.url).pathname;
-  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.0.0'}) : json({error:'请求方法不受支持。'},405);
+  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.0.1'}) : json({error:'请求方法不受支持。'},405);
   if (path === '/api/usage') {
     if(request.method!=='GET') return json({error:'请求方法不受支持。'},405);
     try {return await quotaFor(request,env,'usage');} catch {return json({error:'额度保护尚未就绪，真实分析暂不可用。'},503);}

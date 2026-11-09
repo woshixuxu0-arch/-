@@ -10,7 +10,7 @@ await build({entryPoints:[at('src/worker.mjs')],outfile:at('dist/server/index.js
 await build({entryPoints:[at('public/app.js')],outdir:at('dist/client'),bundle:true,splitting:true,format:'esm',platform:'browser',target:'es2022',minify:true,chunkNames:'chunks/[name]-[hash]',legalComments:'linked'});
 for(const file of ['index.html','style.css','icon.svg'])await copyFile(at('public/'+file),at('dist/client/'+file));
 await mkdir(at('dist/client/vendor'),{recursive:true});
-await copyFile(at('node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),at('dist/client/vendor/pdf.worker.min.mjs'));
+await build({entryPoints:[at('public/pdf-worker.js')],outfile:at('dist/client/vendor/pdf.worker.legacy.min.mjs'),bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true,legalComments:'linked'});
 for(const folder of ['cmaps','standard_fonts','wasm']) await cp(at('node_modules/pdfjs-dist/'+folder),at('dist/client/vendor/'+(folder==='wasm'?'pdf-wasm':folder)),{recursive:true});
 await mkdir(at('dist/client/vendor/ocr'),{recursive:true});await mkdir(at('dist/client/vendor/lang'),{recursive:true});
 await copyFile(at('node_modules/tesseract.js/dist/worker.min.js'),at('dist/client/vendor/ocr/worker.min.js'));

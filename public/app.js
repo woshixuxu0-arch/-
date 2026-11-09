@@ -1,3 +1,4 @@
+import {importErrorMessage} from './import-errors.js';
 const $ = (id) => document.getElementById(id);
 const titles = ['岗位匹配', '个人优势', '主要不足', '简历优化建议', '下一步行动'];
 let mode = 'mock', ready = false, controller, reportText = '', revision = 0, importController, importTarget;
@@ -149,7 +150,7 @@ for(const button of document.querySelectorAll('[data-upload]')) {
       if(importController!==ownController)return;
       if(!result.text.trim())throw Error('未提取到文字，请换清晰的文件，或直接粘贴文本。');
       $('preview-text').value=result.text;$('file-status').textContent=`${result.method}完成。请预览、编辑后确认；OCR 可能存在错字。`;
-    } catch(error) {if(importController===ownController)$('file-status').textContent=error.message || '文件提取失败，请换文件或直接粘贴文本。';}
+    } catch(error) {if(importController===ownController)$('file-status').textContent=importErrorMessage(error);}
     finally {clearTimeout(timeout);if(importController===ownController){importController=null;$('preview-text').disabled=false;previewCount();busy(Boolean(controller));}}
   });
 }
