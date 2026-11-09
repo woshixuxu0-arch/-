@@ -1,5 +1,6 @@
 import {importErrorMessage} from './import-errors.js';
 import {validateFile} from './file-rules.js';
+import {renderReportMarkdown} from './report-format.js';
 const $=id=>document.getElementById(id);
 const fields=['resume','job_description'];
 const labels={resume:'个人简历',job_description:'岗位要求'};
@@ -31,7 +32,7 @@ function busy(value){
   $('loading-status').hidden=!value;$('analysis-form').setAttribute('aria-busy',String(value));
   $('button-label').textContent=value?'正在处理…':mode==='mock'?'开始演示分析':'开始匹配分析';
   for(const field of fields){$(field).readOnly=value;$(field+'-force-ocr').disabled=value;}
-  $('consent').disabled=value;
+  $('consent').disabled=value;$('open-report-format').disabled=value||Boolean(importController);
   for(const button of document.querySelectorAll('[data-upload],[data-preview],[data-remove-file]'))button.disabled=value||Boolean(importController);
 }
 function stage(title,note){$('loading-title').textContent=title;$('loading-note').textContent=note;}
@@ -52,7 +53,7 @@ for(const field of fields){
   $(field+'-force-ocr').addEventListener('change',()=>{if(uploads[field])uploads[field].extracted=false;updateUpload(field);invalidate();});
 }
 function clearAll(focus=true){
-  controller?.abort('clear');closeImport();
+  controller?.abort('clear');closeImport();$('report-format-dialog').close();$('existing-report').value='';$('format-report-error').hidden=true;
   for(const field of fields){selections[field]++;selectionErrors[field]='';uploads[field]=null;$(field).value='';$(field+'-file').value='';$(field+'-force-ocr').checked=false;$(field+'-editor').open=false;$(errorIds[field]).hidden=true;$(field).removeAttribute('aria-invalid');updateUpload(field);}
   $('consent').checked=false;resetReport();invalidate();if(focus)document.querySelector('[data-upload="resume"]').focus();
 }
@@ -80,25 +81,26 @@ function applyExtracted(target,result,text=result.text){
   $(target).value=text;result.item.extracted=true;result.item.forceOCR=result.forceOCR;result.item.method=result.method;
   $(target).dispatchEvent(new Event('input',{bubbles:true}));updateUpload(target);
 }
-function renderReport(result, isMock) {
+function renderReport(result, isMock, localOnly=false) {
   resetReport();
   const sections = typeof result === 'object' && !Array.isArray(result) ? result : null;
+  const plainSections={};
   if (sections && titles.every(t => typeof sections[t] === 'string')) {
     titles.forEach((title, index) => {
       const card = document.createElement('article'); card.className = 'report-card';
       const heading = document.createElement('h3'), number = document.createElement('span');
       number.textContent = `0${index+1}`; heading.append(number, document.createTextNode(title));
-      const content = document.createElement('div'); content.className = 'report-text'; content.textContent = sections[title];
+      const content = document.createElement('div'); content.className = 'report-text'; plainSections[title]=renderReportMarkdown(content,sections[title]);
       card.append(heading, content); $('report-content').append(card);
     });
-    reportText = titles.map(t => `${t}\n${sections[t]}`).join('\n\n');
+    reportText = titles.map(t => `${t}\n${plainSections[t]}`).join('\n\n');
   } else {
-    // 不猜测未知格式的内容或归属，保留 Dify 原始结果，绝不以 HTML 注入。
+    // 保留正文并安全渲染格式，模型 HTML 仍只作为文本展示。
     const content = document.createElement('div'); content.className = 'report-text';
-    content.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    $('report-content').append(content); reportText = content.textContent;
+    reportText=renderReportMarkdown(content,typeof result === 'string' ? result : JSON.stringify(result,null,2));
+    $('report-content').append(content);
   }
-  $('report-note').textContent = isMock ? '演示报告 · 以下是固定结构示例，未分析你的输入。真实分析需连接 Dify；不生成虚构匹配分数。' : '本报告由已连接的 Dify 工作流生成。请核实每一项判断是否有简历原文依据。';
+  $('report-note').textContent = localOnly ? '已在当前页面完成排版，未调用 AI；内容来自你粘贴的报告，请自行核对。' : isMock ? '演示报告 · 以下是固定结构示例，未分析你的输入。真实分析需连接 Dify；不生成虚构匹配分数。' : '本报告由已连接的 Dify 工作流生成。请核实每一项判断是否有简历原文依据。';
   reportText = `${$('report-note').textContent}\n\n${reportText}`;
   $('report').hidden = false; $('report').focus({preventScroll:true}); $('report').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -221,3 +223,14 @@ async function refreshInputLimits() {
 window.addEventListener('pageshow',event=>{if(event.persisted)clearAll(false);});
 for(const field of fields)updateUpload(field);
 counts();configure();loadUsage();
+
+const formatDialog=$('report-format-dialog');
+$('open-report-format').addEventListener('click',()=>{if(controller||importController)return;$('format-report-error').hidden=true;formatDialog.showModal();$('existing-report').focus();});
+function closeReportFormat(){formatDialog.close();$('existing-report').value='';$('format-report-error').hidden=true;}
+$('close-report-format').addEventListener('click',closeReportFormat);
+formatDialog.addEventListener('cancel',event=>{event.preventDefault();closeReportFormat();});
+$('format-existing-report').addEventListener('click',()=>{
+ const text=$('existing-report').value.trim();
+ if(!text||text.length>160000){$('format-report-error').textContent=!text?'请先粘贴已有报告。':'报告过长，请拆分到 160,000 字符以内。';$('format-report-error').hidden=false;return;}
+ closeReportFormat();renderReport(text,false,true);
+});

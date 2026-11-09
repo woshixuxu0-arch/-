@@ -1,4 +1,4 @@
-# JobFit AI H5 · v2.1.0
+# JobFit AI H5 · v2.1.1
 
 原项目升级，生产 Worker 仍为 `worker`，仓库仍为 `woshixuxu0-arch/-`。不创建新网站、不修改原来的独立 Sites 演示站。Dify 工作流输入继续使用 `resume`、`job_description`，输出使用 `result`。
 
@@ -15,7 +15,7 @@
 
 每个文件 ≤10 MiB；PDF ≤20 页，其中 OCR ≤5 页。可勾选「PDF 按扫描件识别」应对含水印 / 少量文字但主体为扫描图的文件。图片最长边缩至 2400 像素，拒绝异常尺寸或超过 4000 万像素的图片。DOCX 校验 ZIP 结构、最多 1000 项且声明解压内容 ≤24 MiB。提取 120 秒超时，可取消。识别后超出当前工作流上限会停止提交、展开文字编辑；不会静默截断或自动调用 AI。
 
-不支持旧 DOC、HEIC、加密 PDF / DOCX；请先转换或移除密码。Word 内嵌图片不自动 OCR，请将图片导出为 JPG/PNG，或导出扫描 PDF 后导入。OCR 对模糊截图、复杂排版和手写文字可能不准，必须预览核对。低内存手机可优先上传 TXT 或少页 PDF。
+不支持旧 DOC、HEIC、加密 PDF / DOCX；请先转换或移除密码。Word 内嵌图片不自动 OCR，请将图片导出为 JPG/PNG，或导出扫描 PDF 后导入。OCR 对模糊截图、复杂排版和手写文字可能不准，建议按需预览核对。低内存手机可优先上传 TXT 或少页 PDF。
 
 ## 服务端额度保护
 
@@ -60,7 +60,7 @@
 
 唯一必需的敏感变量仍是 **运行时 Secret `DIFY_API_KEY`**，在 Cloudflare `worker → 设置 → 运行时变量和密钥 → 生产` 中由所有者自行填写。不要填到构建变量、前端、代码仓库或聊天。已有的 Secret 会由 Wrangler 保留，本升级不读取或改写它。
 
-`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.1.0"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
+`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.1.1"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
 
 迁移若因 Cloudflare 账户权限 / 配额受阻，不应移除计数器强行发布。修复账户绑定后重试构建即可；计数不可用时真实 AI 保持停止。
 
@@ -105,3 +105,13 @@ PDF 主模块与后台 Worker 统一使用官方 legacy 构建，为缺少 Uint8
 识别失败、取消识别或文字超限时停止在付费请求之前。已经进入 Dify 阶段的失败 / 取消仍按原额度规则计数。不自动重试 Dify；失败后保留文件和文字，修正后可重试。自动提取过的文字可编辑，重试不会用原文件覆盖编辑内容，除非重新选择文件或主动改变扫描识别方式。
 
 验证：`node scripts/direct-analysis-browser-check.mjs` 覆盖文件 + 招聘图片一键识别分析、同意门槛、重复点击、文件 / 文字混用、解析失败、超长保留原文、编辑重试及取消。使用模拟分析接口，不消耗真实 AI 次数。`scripts/browser-check.mjs` 继续覆盖可选预览的六种格式与旧浏览器兼容。
+
+## v2.1.1 报告排版与纯文字复制
+
+AI 返回的 Markdown 现在显示为加粗、标题、列表、分隔线、引用、代码和可横向滚动的表格，正文内容保持。兼容模型把空格放在结尾加粗标记内的情况，不盲目删除真实星号。复制按钮输出纯文字，同时保留编号与真实代码内容。
+
+使用 Markdown 解析器生成结构化 token，再以固定标签白名单和 `createTextNode` / `textContent` 创建 DOM；不把模型原文或生成的 HTML 赋给 innerHTML。原始 HTML 仅作为文字显示，链接只允许 http / https / mailto，外部图片不创建 img 节点、不自动请求。
+
+「粘贴已有报告」可在本地整理旧报告，毋须重新分析，不提交服务器、不消耗 AI 次数，也不持久化保存。刷新前请先复制需要保留的旧报告，再在新版页面粘贴整理。该入口只排版用户提供的文字，不验证报告内容正确性。
+
+验证：`node tests/report-format.test.mjs` 检查文字保留、宽松加粗、编号、真实星号和安全链接；本地预览运行后执行 `node scripts/report-browser-check.mjs` 检查实际 DOM 排版、复制、移动布局、五段结构化报告以及 HTML / 远程图片不执行。所有分析响应均为模拟，不消耗真实 AI。

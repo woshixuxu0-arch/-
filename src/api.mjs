@@ -34,7 +34,7 @@ function parseResult(value) {
 }
 export async function handleApi(request, env = {}, fetcher = fetch) {
   const path = new URL(request.url).pathname;
-  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.1.0'}) : json({error:'请求方法不受支持。'},405);
+  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.1.1'}) : json({error:'请求方法不受支持。'},405);
   if(path === '/api/input-limits'){
     if(request.method!=='GET')return json({error:'请求方法不受支持。'},405);
     return json(await readInputLimits(env,fetcher) || {limits:SITE_LIMITS,source:'site',confirmedFields:[]});
