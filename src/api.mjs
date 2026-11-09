@@ -1,3 +1,4 @@
+import {quotaFor} from './quota.mjs';
 export const titles = ['岗位匹配', '个人优势', '主要不足', '简历优化建议', '下一步行动'];
 export const mockReport = {
   岗位匹配: '【结构示例，非个人评估】\n真实报告应逐项对照岗位要求与简历原文，说明已有证据、尚缺证据及不能判断的部分。不在缺少依据时给出匹配分数。',
@@ -32,22 +33,27 @@ function parseResult(value) {
 }
 export async function handleApi(request, env = {}, fetcher = fetch) {
   const path = new URL(request.url).pathname;
-  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env)}) : json({error:'请求方法不受支持。'},405);
+  if (path === '/api/config') return request.method === 'GET' ? json({mode:modeFor(env),quotaProtected:Boolean(env.QUOTA_LEDGER),version:'2.0.0'}) : json({error:'请求方法不受支持。'},405);
+  if (path === '/api/usage') {
+    if(request.method!=='GET') return json({error:'请求方法不受支持。'},405);
+    try {return await quotaFor(request,env,'usage');} catch {return json({error:'额度保护尚未就绪，真实分析暂不可用。'},503);}
+  }
   if (path !== '/api/analyze') return json({error:'接口不存在。'},404);
   if (request.method !== 'POST') return json({error:'请使用 POST 请求。'},405);
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return json({error:'不允许跨站请求。'},403);
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return json({error:'请使用 JSON 格式提交。'},415);
   if (Number(request.headers.get('content-length') || 0) > 180000) return json({error:'输入内容过长。'},413);
-  let input;
+  let input,bodyTimer;
   try {
     const reader = request.body?.getReader(); const chunks = []; let total = 0;
+    if(reader) bodyTimer=setTimeout(()=>{reader.cancel().catch(()=>{});},10000);
     if (!reader) return json({error:'请求内容为空。'},400);
     while (true) { const {done,value} = await reader.read(); if (done) break; total += value.byteLength; if (total > 180000) { await reader.cancel(); return json({error:'输入内容过长。'},413); } chunks.push(value); }
     const bytes = new Uint8Array(total); let offset = 0; for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.length; }
     input = JSON.parse(new TextDecoder().decode(bytes));
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error();
-  } catch { return json({error:'请求内容格式有误。'},400); }
+  } catch { return json({error:'请求内容格式有误或读取超时。'},400); } finally {clearTimeout(bodyTimer);}
   if (modeFor(env) === 'mock') return json({mode:'mock',result:mockReport});
   for (const key of ['resume','job_description']) {
     if (typeof input[key] !== 'string' || input[key].trim().length < 20 || input[key].length > 20000) return json({error:'简历与岗位要求均须为 20–20,000 个字符。'},400);
@@ -55,6 +61,13 @@ export async function handleApi(request, env = {}, fetcher = fetch) {
   if (input.consent !== true) return json({error:'提交前需要同意本次数据处理。'},400);
   let base;
   try { base = new URL(env.DIFY_API_URL); if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) throw new Error(); } catch { return json({error:'服务端 Dify 地址配置有误，请联系管理员。'},503); }
+  let quota,accounting;
+  try {
+    accounting=await quotaFor(request,env,'reserve');
+    if(!accounting.ok) return accounting;
+    quota=(await accounting.json()).quota;
+  } catch {return json({error:'额度保护暂时不可用，未调用 AI，请稍后重试。'},503);}
+  const finish=(data,status=200)=>{const res=json({...data,quota},status);const cookie=accounting.headers.get('Set-Cookie');if(cookie)res.headers.set('Set-Cookie',cookie);return res;};
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 115000);
   const abort = () => controller.abort(); request.signal.addEventListener('abort',abort,{once:true});
@@ -64,18 +77,18 @@ export async function handleApi(request, env = {}, fetcher = fetch) {
       method:'POST', redirect:'manual', headers:{Authorization:`Bearer ${env.DIFY_API_KEY}`, 'Content-Type':'application/json'},
       body:JSON.stringify({inputs:{resume:input.resume.trim(),job_description:input.job_description.trim()},response_mode:'blocking',user:crypto.randomUUID()}),signal:controller.signal
     });
-    if (response.status >= 300 && response.status < 400) return json({error:'Dify 地址返回了重定向，请管理员检查 API 基础地址。'},502);
+    if (response.status >= 300 && response.status < 400) return finish({error:'Dify 地址返回了重定向，请管理员检查 API 基础地址。'},502);
     if (!response.ok) {
-      if (response.status === 429) return json({error:'分析服务繁忙或已达额度，请稍后重试。'},429);
-      if ([401,403].includes(response.status)) return json({error:'Dify 服务认证失败，请管理员检查服务端密钥。'},502);
-      return json({error:'Dify 暂时无法完成分析，请稍后重试。'},502);
+      if (response.status === 429) return finish({error:'分析服务繁忙或已达额度，请稍后重试。'},429);
+      if ([401,403].includes(response.status)) return finish({error:'Dify 服务认证失败，请管理员检查服务端密钥。'},502);
+      return finish({error:'Dify 暂时无法完成分析，请稍后重试。'},502);
     }
     const data = await response.json();
-    if (data.data?.status !== 'succeeded') return json({error:'Dify 工作流执行未成功，请管理员检查工作流运行记录。'},502);
+    if (data.data?.status !== 'succeeded') return finish({error:'Dify 工作流执行未成功，请管理员检查工作流运行记录。'},502);
     const result = parseResult(data.data.outputs?.result);
-    return json({mode:'live',result});
+    return finish({mode:'live',result});
   } catch(error) {
-    if (controller.signal.aborted) return json({error:'分析超时或已取消，请稍后重试。'},504);
-    return json({error:error.message === 'format' ? '工作流未返回有效 result，请管理员检查输出配置。' : '无法连接分析服务，请稍后重试。'},502);
+    if (controller.signal.aborted) return finish({error:'分析超时或已取消，请稍后重试。'},504);
+    return finish({error:error.message === 'format' ? '工作流未返回有效 result，请管理员检查输出配置。' : '无法连接分析服务，请稍后重试。'},502);
   } finally { clearTimeout(timer); request.signal.removeEventListener('abort',abort); }
 }

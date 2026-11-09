@@ -1,96 +1,83 @@
-# JobFit AI
+# JobFit AI H5 · v2
 
-面向中国求职者的中文 H5 简历与岗位匹配 MVP。移动端优先，蓝白界面，无账号、收费或数据库。
+原项目升级，生产 Worker 仍为 `worker`，仓库仍为 `woshixuxu0-arch/-`。不创建新网站、不修改原来的独立 Sites 演示站。Dify 工作流输入继续使用 `resume`、`job_description`，输出使用 `result`。
 
-## 当前状态
+## 文件导入与隐私
 
-默认 **Mock 演示**，未连接真实 AI。演示只返回固定的五部分结构示例，不评估输入，不虚构分数、技能、经历。演示请求不发送用户粘贴的文本。
+- 保留粘贴文本；简历和岗位要求都可选择单个 PDF、DOCX、TXT、JPG/JPEG 或 PNG。安卓文件选择器可选文件、相册图片。
+- 所有解析都在浏览器本地运行：PDF.js 提取 PDF，Mammoth 提取 Word 文字，Tesseract 中文 / 英文 OCR 识别图片和扫描 PDF。
+- **不使用第三方解析 API，也不上传原始文件。** 组件与语言模型由同一个 Cloudflare 站点提供；首次 OCR 下载约 10 MB 识别资源，之后浏览器可按普通静态资源策略缓存。缓存的是程序和语言数据，不是简历。
+- 先显示可编辑的预览，必须点击「确认使用这段文本」才替换对应输入框。之后仍须勾选数据处理同意、点击分析，才将最终文本提交 Dify。不会自动调用 AI。
+- 不保存文件、识别文字或简历到服务端数据库、磁盘、localStorage、sessionStorage 或 IndexedDB。关闭 / 刷新页面后应用不保留文档。用户主动复制到剪贴板的内容由系统管理。
+- Dify 及其工作流使用的模型服务可能保留输入和执行日志；站点无法控制第三方留存。请在 Dify 与模型供应商后台核对保留设置，并提示试用者移除敏感信息。
 
-技术栈：原生 HTML / CSS / JavaScript + Node.js 22+ 服务端；零运行时 npm 依赖。支持 Docker，也可构建为 Cloudflare Worker ESM。无需在安卓手机上配置开发环境。
+### 文件与设备限制
 
-## 本地 / 云端运行
+每个文件 ≤10 MiB；PDF ≤20 页，其中 OCR ≤5 页。可勾选「PDF 按扫描件识别」应对含水印 / 少量文字但主体为扫描图的文件。图片最长边缩至 2400 像素，拒绝异常尺寸或超过 4000 万像素的图片。DOCX 校验 ZIP 结构、最多 1000 项且声明解压内容 ≤24 MiB。提取 120 秒超时，可取消。导入正文须编辑至 ≤20,000 字符后确认。
 
-```sh
-npm start
-# http://localhost:3000
-npm run check
-npm run build
-```
+不支持旧 DOC、HEIC、加密 PDF / DOCX；请先转换或移除密码。Word 内嵌图片不自动 OCR，请将图片导出为 JPG/PNG，或导出扫描 PDF 后导入。OCR 对模糊截图、复杂排版和手写文字可能不准，必须预览核对。低内存手机可优先上传 TXT 或少页 PDF。
 
-没有依赖安装步骤。Node 22+。可在 GitHub Codespaces 中运行，Ports 面板打开 3000 端口。
+## 服务端额度保护
 
-## 当前 Cloudflare Workers 部署
+使用 **一个 SQLite Durable Object** `QuotaLedger`，通过固定对象名 `jobfit-global-v1` 处理全站预留。`wrangler.jsonc` 包含原 Worker 的资产绑定、Durable Object 绑定与 `new_sqlite_classes` 迁移，部署时自动创建，无需另建数据库或填写新的密钥。
 
-此仓库 `woshixuxu0-arch/-` 用于 JobFit AI，目标 Cloudflare Worker 名为 `worker`。仓库名字是一个连字符，不影响 Git 克隆。原来的公开 `chatgpt.site` 网站由 Sites 独立托管，不会随本仓库推送更新。
+默认规则：
 
-源码不含 API 密钥。`wrangler.jsonc` 仅配置公开的 `DIFY_API_URL=https://api.dify.ai/v1`。缺少 `DIFY_API_KEY` 时网站维持演示模式。
+| 配置 | 默认值 | 意义 |
+| --- | --- | --- |
+| `VISITOR_DAILY_LIMIT` | `3` | 每个签名访客 Cookie 和每个网络地址当天分别最多预留 3 次 |
+| `GLOBAL_DAILY_LIMIT` | `30` | 全站当天最多批准 30 次 AI 调用预留，可设 0 暂停 AI |
 
-### 手机端最少操作
+- 日期按 **北京时间 Asia/Shanghai 每天 00:00** 重置；日期键自动轮换，不依赖定时任务。
+- 在同一个 SQLite `transactionSync` 中检查并同时更新全站、访客、网络三项计数。实际请求必须先成功预留，且每次预留只调用一次 Dify，不自动重试、也不跟随重定向。
+- **统计的是已批准的调用尝试，而非成功报告数。** 网络错误、工作流失败、超时、用户取消仍占额度，不退回，防止因重试或不确定执行状态突破上限。无效输入和未同意提交不调用 AI、不占用日额度。
+- 计数服务缺失、不可用、超时（5 秒）或异常时返回中文 503，**禁止调用 Dify**。没有内存计数降级放行。
+- 使用 HttpOnly、Secure、SameSite=Lax 的 30 天匿名签名 Cookie。签名密钥在 DO 内自动生成并持久化，客户端不能伪造有效标识。Cookie 不含简历。
+- 网络依据 Cloudflare 注入的 `CF-Connecting-IP`，不信任 `X-Forwarded-For`。IPv6 按 /64 归并；Cookie 重置仍受网络上限约束，换 IP 但保留 Cookie 仍受访客上限约束。每个网络每分钟最多 6 次有效分析尝试。
+- **无登录无法识别真实自然人**：同时更换设备标识和代理 IP 可绕过个人额度，但仍不能超过全站原子上限；共享 Wi-Fi / 运营商 NAT 用户可能共用 3 次网络额度。
+- 计数只存日期、次数、按日 HMAC 后的匿名访客 / 网络摘要，不保存原始 IP、简历或结果。每次访问会惰性清理 7 天前的计数和旧分钟桶；签名密钥长期保留。无访问时不会主动运行清理任务。
+- API 仅接受 JSON，两个文本变量各 20–20,000 字符，总请求体 ≤180 KB；读取请求体 10 秒，Dify 请求 115 秒超时。没有文件上传 API，直接提交 multipart 文件返回 415。
 
-1. Cloudflare → Workers & Pages → **worker** → Builds：连接 `woshixuxu0-arch/-`，生产分支 `main`，根目录为仓库根目录。
-2. 部署命令使用 `npx wrangler deploy`。Build command 可留空；Wrangler 自动执行配置中的 `npm run build`。如果已填 `npm run build` 也可正常运行。
-3. 首次提交后，Cloudflare 通常自动触发构建；若未触发，在 Builds 点击 Retry／重试。
-4. 部署成功后，进入 **worker → Settings → Variables and Secrets → Add**：Type 选择 **Secret**，Variable name 填 `DIFY_API_KEY`，Value 在 Cloudflare 自己的安全输入框粘贴工作流密钥。点击 Deploy／Save and deploy，使 Secret 应用于当前运行版本。不要填在 Build variables、代码编辑器或 GitHub 中。
-5. 点击 worker 的 Visit／访问地址。确认显示 Dify 接入模式，用脱敏材料测试；配置模式不等于已验证 API 通畅。
+### 硬上限的准确边界
 
-如果 Cloning 仍失败，查看该次日志并检查 Cloudflare 的 GitHub App 是否被授权访问此仓库；没有明确证据前不要更改其他项目的权限。
+本系统能保证：**在当前这一个生产 Worker、同一个 DO namespace / 固定对象名下，每个额度日期最多批准配置数量的 Dify API 调用尝试**，跨并发、边缘实例与运行时重启仍由持久化账本约束。
 
-### 其他部署方式
+初次升级前的旧版调用没有历史计数，因此升级当日从启用新账本时开始统计。不要删除 / 重建 DO namespace、改固定对象名、重置存储，或另外部署绕过账本的调用端。直接在 Dify、其他站点或工作流里调用不属于此上限。
 
-本项目也可用 Docker 部署至支持 Node Web Service 的平台。使用根目录 Dockerfile，平台 Environment／Secrets 填写 `DIFY_API_URL` 与 `DIFY_API_KEY`。Node 服务监听平台提供的 `PORT`。GitHub Pages 只能托管静态文件，无法运行保管密钥的服务端 API。
+这不是费用金额硬上限：一次工作流可能运行多个模型节点或使用不同 Token 数量。实际 AI 费用仍按 Dify / 模型供应商配置计费；应同时设置供应商预算与工作流输出长度限制。Cloudflare 的网页 / API / DO 请求量也独立计费或受免费额度限制。
 
-## 接入现有 Dify 工作流
+## 怎样查看 / 调整额度
 
-只需要配置服务端环境变量（参考 `.env.example`）：
+首页「今日 AI 额度」显示你 / 当前网络剩余次数、全站已批准次数与上限。点击「刷新额度」不消耗 AI 次数。
 
-| 变量 | 内容 |
-| --- | --- |
-| `DIFY_API_URL` | 工作流「访问 API」页面的基础 URL，例如 `https://api.dify.ai/v1`，不含 `/workflows/run` |
-| `DIFY_API_KEY` | 该已发布工作流的 API Key，仅存放在服务端 Secrets |
-| `PORT` | Node 服务端端口，默认 3000，云平台通常自动提供 |
+`GET /api/usage` 返回同样的汇总 JSON、北京时间日期和重置时刻，不包含密钥、IP 或简历。查看真实 Token / 金额，请打开 Dify 工作流的日志 / 运行记录，以及模型供应商账单。工作流失败也会占本站已预留次数，两者不能直接按成功报告数对账。
 
-两项 Dify 变量均非空时进入接入模式，模式标记表示配置存在，连通性在首次分析时验证。未配置完整时保持演示。Dify Web App 分享链接不是 API 地址。
+调整上限：修改 `wrangler.jsonc` 的两个公开 `vars` 后提交并部署。降低上限不会清零已有计数，已用超过新上限即停止。不要删除 DO 以「重置」额度。
 
-调用链：浏览器 → 同源 `POST /api/analyze` → 服务端携带 Bearer Key → `POST {DIFY_API_URL}/workflows/run`。请求为：
+## 部署与 Secret
 
-```json
-{
-  "inputs": {"resume": "用户简历", "job_description": "岗位要求"},
-  "response_mode": "blocking",
-  "user": "每次请求随机生成的匿名 UUID"
-}
-```
+原 Cloudflare 项目：生产分支 `main`，根目录为仓库根，部署命令 `npx wrangler deploy`。配置里的 `build.command` 自动执行 `npm run build`。依赖已用 `package-lock.json` 锁定，静态 PDF / OCR 资源与 Worker 一同部署。
 
-读取 `data.outputs.result`，检查 `data.status === "succeeded"`。不使用对话接口，不修改你现有的输入变量。
+唯一必需的敏感变量仍是 **运行时 Secret `DIFY_API_KEY`**，在 Cloudflare `worker → 设置 → 运行时变量和密钥 → 生产` 中由所有者自行填写。不要填到构建变量、前端、代码仓库或聊天。已有的 Secret 会由 Wrangler 保留，本升级不读取或改写它。
 
-### 推荐 result 格式
+`DIFY_API_URL=https://api.dify.ai/v1` 为公开配置，已写入 `wrangler.jsonc`。检查 `/api/config` 的 `version: "2.0.0"`、`mode: "live"` 与 `quotaProtected: true`；配置存在不代表真实工作流已运行，需一次脱敏材料测试确认。
 
-为了稳定分区展示，建议在现有工作流的提示词中要求 `result` 为以下 JSON 字符串，或含同名标题的 Markdown；不必改两个输入变量：
+迁移若因 Cloudflare 账户权限 / 配额受阻，不应移除计数器强行发布。修复账户绑定后重试构建即可；计数不可用时真实 AI 保持停止。
 
-```json
-{
-  "岗位匹配": "逐项比较岗位要求与简历证据，不凭空给分",
-  "个人优势": "引用简历中的真实证据，并对应岗位要求",
-  "主要不足": "区分能力不足与简历尚未体现；无法判断时说明",
-  "简历优化建议": "只优化真实经历的表达，不杜撰数据或成果",
-  "下一步行动": "具体、可执行的准备清单"
-}
-```
+## Cloudflare 成本
 
-已有工作流返回其他文本时仍安全展示完整原文，避免误分或丢失内容。所有模型输出通过 `textContent` 展示，不执行 HTML。前端无法保证模型永不产生错误，必须在工作流约束并人工核实。没有伪造分数或补全经历的前端逻辑。
+依据 [Cloudflare Durable Objects 官方定价](https://developers.cloudflare.com/durable-objects/platform/pricing/)，SQLite Durable Objects 支持 Workers Free：每天 100,000 个 DO 请求、13,000 GB-s 时长，SQLite 每天 500 万行读取、10 万行写入，总存储 5 GB。平台可调整额度，以账号控制台和官方最新定价为准。
 
-## 隐私与安全边界
+按每天最多 30 次 AI 预留和少量访问估算，计数写入 / 存储很小，正常 MVP 试用通常可处于免费配额内。访问页面、读取额度、被拒绝的请求仍会消耗相应 Workers / DO 用量；遇到恶意流量、已有账户其他业务或付费计划时不能保证 Cloudflare 账单为零。本升级不会开通或升级付费套餐。
 
-- 本应用不写磁盘保存输入，不使用数据库、浏览器持久存储、分析埋点或请求正文日志。刷新后页面清空；系统剪贴板由用户主动复制触发。
-- 真实模式必须明确勾选单次数据处理同意。内容发送至 Dify 与其配置的模型供应商，第三方可能保留运行记录；上线前检查其日志与保留政策。没有「绝不离开设备」的承诺。
-- 服务端限制每个字段 20–20,000 字符、总请求体 180KB，限制请求方法与跨站来源，115 秒上游超时；不将 Dify 原始错误或密钥返回给用户。
-- Node 版本每实例最多两次并发真实分析。Worker 版本需使用托管平台限速；多实例部署也需要平台级限速。没有登录功能意味着公开 API 可被脚本请求，接入真实 Key 后请配置平台额度、限速及 Dify 用量监控。
-- Dify Key 仅在运行时从服务器环境读取，构建过程不会读取或打包环境变量。不要把 Key 改成前端常量或使用 `VITE_` / `NEXT_PUBLIC_` 前缀。
+本地文件解析和 OCR **没有第三方解析服务调用费**；主要代价是手机流量、CPU、内存与电量。Dify 的真实分析仍可能产生原有模型费用。
 
-## 验证
+## 开发与验证
 
-`npm run check` 执行语法检查与 Node 内置测试：演示隔离、密钥不泄漏、输入/同意校验、请求上限、跨站拒绝、Dify 字段映射、五段报告解析、原文回退及上游失败处理。
+Node.js 22+；先 `npm ci`，再 `npm start`。本地使用 Miniflare / workerd 和 SQLite DO，默认无 Dify Key，仅演示，不请求付费模型。`.wrangler` 本地计数文件已被 Git 忽略。部署目标是 Cloudflare Workers；旧 Node server / Docker 启动方式不用于 v2 生产额度保护。
 
-手动移动端检查：360/390/412px 宽度无横向溢出；填入示例 → 演示报告 → 复制 → 清空；空输入时聚焦错误项；分析可取消；键盘打开后按钮可滚动抵达；系统大字体可读；键盘 Tab 操作与减少动态效果设置有效。
+- `npm run check`：构建、语法检查、API / 文件校验 / 真实 SQLite DO 并发和重启持久化测试。
+- `npm run build`：输出 `dist/server/index.js` 与同源 `dist/client` PDF / OCR 资源，不读取或打包 Secret。
+- 本地预览运行时，`CHROMIUM_PATH=/usr/bin/chromium node scripts/browser-check.mjs`：生成虚构 TXT、DOCX、文字 PDF、JPG、PNG、扫描 PDF，验证本地提取、预览确认、伪装格式拒绝、手机视口与不上传文件的网络断言。
 
-尚无 Dify 配置时不能进行真实工作流端到端验证。Android 真机和复制权限也需在实际 HTTPS 部署上复核。
+真实 Android 设备和不同字体 / 扫描质量仍需用户试用反馈。整个项目不含登录、收费或业务数据库功能；SQLite 仅用于额度与安全元数据。

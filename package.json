@@ -1,14 +1,30 @@
 {
   "name": "jobfit-ai-web",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env server.mjs",
-    "start": "node --env-file-if-exists=.env server.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "start": "node --env-file-if-exists=.env scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test",
-    "check": "node --check server.mjs && node --check src/api.mjs && node --check public/app.js && node --test"
+    "test": "npm run build && node --test --test-concurrency=1",
+    "check": "node --check src/api.mjs && node --check src/quota.mjs && node --check public/app.js && npm test",
+    "test:browser": "node scripts/browser-check.mjs"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
+    "mammoth": "1.13.0",
+    "pdfjs-dist": "6.5.438",
+    "tesseract.js": "7.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jszip": "3.10.2",
+    "miniflare": "4.20260730.0",
+    "playwright-core": "1.65.0"
   }
 }

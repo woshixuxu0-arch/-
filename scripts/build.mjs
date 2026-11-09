@@ -1,10 +1,23 @@
-import {mkdir,readFile,writeFile,rm} from 'node:fs/promises';
-await rm(new URL('../dist/',import.meta.url),{recursive:true,force:true});
-await mkdir(new URL('../dist/server/',import.meta.url),{recursive:true});
-const assets = {};
-for (const [route,file,type] of [['/','index.html','text/html; charset=utf-8'],['/style.css','style.css','text/css; charset=utf-8'],['/app.js','app.js','text/javascript; charset=utf-8'],['/icon.svg','icon.svg','image/svg+xml']]) {
-  assets[route] = [await readFile(new URL('../public/'+file,import.meta.url),'utf8'),type];
+import {mkdir,copyFile,cp,rm,writeFile} from 'node:fs/promises';
+import {build} from 'esbuild';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const at=(name)=>path.join(root,name);
+await rm(at('dist'),{recursive:true,force:true});
+await mkdir(at('dist/server'),{recursive:true});await mkdir(at('dist/client'),{recursive:true});
+await build({entryPoints:[at('src/worker.mjs')],outfile:at('dist/server/index.js'),bundle:true,format:'esm',platform:'browser',target:'es2022'});
+await build({entryPoints:[at('public/app.js')],outdir:at('dist/client'),bundle:true,splitting:true,format:'esm',platform:'browser',target:'es2022',minify:true,chunkNames:'chunks/[name]-[hash]',legalComments:'linked'});
+for(const file of ['index.html','style.css','icon.svg'])await copyFile(at('public/'+file),at('dist/client/'+file));
+await mkdir(at('dist/client/vendor'),{recursive:true});
+await copyFile(at('node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),at('dist/client/vendor/pdf.worker.min.mjs'));
+for(const folder of ['cmaps','standard_fonts','wasm']) await cp(at('node_modules/pdfjs-dist/'+folder),at('dist/client/vendor/'+(folder==='wasm'?'pdf-wasm':folder)),{recursive:true});
+await mkdir(at('dist/client/vendor/ocr'),{recursive:true});await mkdir(at('dist/client/vendor/lang'),{recursive:true});
+await copyFile(at('node_modules/tesseract.js/dist/worker.min.js'),at('dist/client/vendor/ocr/worker.min.js'));
+for(const suffix of ['lstm','simd-lstm','relaxedsimd-lstm']) for(const ext of ['wasm','wasm.js']) {
+  const file=`tesseract-core-${suffix}.${ext}`;await copyFile(at('node_modules/tesseract.js-core/'+file),at('dist/client/vendor/ocr/'+file));
 }
-const api = await readFile(new URL('../src/api.mjs',import.meta.url),'utf8');
-await writeFile(new URL('../dist/server/index.js',import.meta.url),api + '\nconst assets = '+JSON.stringify(assets)+';\nexport default { async fetch(request, env) { const path = new URL(request.url).pathname; if (path.startsWith("/api/")) return handleApi(request,env); if (!["GET","HEAD"].includes(request.method)) return new Response("Method not allowed",{status:405}); const asset = assets[path]; if (!asset) return new Response("Not found",{status:404}); return new Response(request.method === "HEAD" ? null : asset[0],{headers:{"Content-Type":asset[1],"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src \'self\'; script-src \'self\'; style-src \'self\'; img-src \'self\'; connect-src \'self\'; frame-ancestors \'none\'; base-uri \'none\'; form-action \'self\'","Permissions-Policy":"camera=(), microphone=(), geolocation=()"}}); } };\n');
-console.log('Built dist/server/index.js (Worker ESM, no secrets bundled)');
+for(const lang of ['chi_sim','eng']) await copyFile(at(`node_modules/@tesseract.js-data/${lang}/4.0.0_best_int/${lang}.traineddata.gz`),at(`dist/client/vendor/lang/${lang}.traineddata.gz`));
+await writeFile(at('dist/client/robots.txt'),'User-agent: *\nDisallow: /api/\n');
+for(const [src,dest] of [['node_modules/pdfjs-dist/LICENSE','dist/client/vendor/PDFJS-LICENSE.txt'],['node_modules/tesseract.js-core/LICENSE','dist/client/vendor/ocr/CORE-LICENSE.txt'],['node_modules/tesseract.js/dist/worker.min.js.LICENSE.txt','dist/client/vendor/ocr/worker.min.js.LICENSE.txt']])await copyFile(at(src),at(dest));
+console.log('Built Worker, Durable Object and same-origin local PDF / DOCX / OCR assets; no environment secrets bundled.');

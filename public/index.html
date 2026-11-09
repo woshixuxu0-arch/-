@@ -31,12 +31,16 @@
 <section class="workspace" id="workspace" aria-labelledby="workspace-title">
   <div class="section-top"><div><div class="section-kicker">CAREER WORKSPACE</div><h2 id="workspace-title">开启你的岗位匹配分析</h2></div><span class="mode-badge" id="mode-badge">○ 演示模式</span></div>
   <div class="demo-notice" id="mode-notice"><span class="notice-icon">i</span><p><strong>当前为 Mock 演示</strong> · 尚未连接 Dify，报告仅展示结构示例，不代表对你个人的真实评估。</p></div>
-  <form id="analysis-form" novalidate>
+  <section class="quota-panel" aria-label="AI 使用额度"><div><strong>今日 AI 额度</strong><p id="quota-status" role="status">正在读取服务端额度…</p></div><button id="refresh-quota" type="button" class="text-button">刷新额度</button></section>
+  <p class="file-privacy">文件提取和中文 OCR 均在你的设备上完成，原文件不会上传。首次 OCR 需下载识别组件；确认文本并同意分析后，文本才会发送给 Dify。仅为额度保护保存匿名标识与计数。</p>
+  <form id="analysis-form" novalidate autocomplete="off">
     <div class="input-grid">
       <section class="input-card"><div class="card-heading"><div class="step-icon">01</div><div><label for="resume">个人简历</label><p>让 AI 了解你的经历与能力</p></div><button class="text-button" id="fill-example" type="button">填入示例 <span aria-hidden="true">↗</span></button></div>
+        <div class="upload-row"><button type="button" class="upload-button" data-upload="resume">＋ 选择文件 / 相册图片</button><input type="file" id="resume-file" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/jpeg,image/png" hidden><span>PDF · DOCX · TXT · JPG · PNG / ≤10 MB</span></div><label class="force-ocr"><input type="checkbox" id="resume-force-ocr"> PDF 按扫描件识别（最多 5 页）</label>
         <div class="textarea-wrap"><textarea id="resume" name="resume" placeholder="在这里粘贴你的简历内容…&#10;&#10;建议包含：&#10;• 工作 / 实习经历&#10;• 项目经历与个人贡献&#10;• 教育背景、技能与成果&#10;&#10;无需填写姓名、电话、身份证等敏感信息。" maxlength="20000" aria-describedby="resume-hint resume-error" spellcheck="false"></textarea><div class="input-footer"><span id="resume-hint">纯文本即可，建议先去除个人敏感信息</span><span id="resume-count">0 / 20,000</span></div></div><p id="resume-error" class="field-error" hidden></p>
       </section>
       <section class="input-card"><div class="card-heading"><div class="step-icon violet">02</div><div><label for="job_description">岗位要求</label><p>告诉 AI 你想去往的方向</p></div><span class="card-tag">JOB DESCRIPTION</span></div>
+        <div class="upload-row"><button type="button" class="upload-button" data-upload="job_description">＋ 选择文件 / 相册图片</button><input type="file" id="job_description-file" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/jpeg,image/png" hidden><span>PDF · DOCX · TXT · JPG · PNG / ≤10 MB</span></div><label class="force-ocr"><input type="checkbox" id="job_description-force-ocr"> PDF 按扫描件识别（最多 5 页）</label>
         <div class="textarea-wrap"><textarea id="job_description" name="job_description" placeholder="在这里粘贴目标岗位的招聘描述…&#10;&#10;建议包含：&#10;• 岗位名称与工作职责&#10;• 必备技能与任职要求&#10;• 加分项与业务背景&#10;&#10;完整的岗位描述，有助于获得更有针对性的建议。" maxlength="20000" aria-describedby="job-hint job-error" spellcheck="false"></textarea><div class="input-footer"><span id="job-hint">越具体的岗位要求，越清晰的分析方向</span><span id="job-count">0 / 20,000</span></div></div><p id="job-error" class="field-error" hidden></p>
       </section>
     </div>
@@ -48,6 +52,7 @@
 </section>
 <section class="report" id="report" hidden aria-labelledby="report-title" tabindex="-1"><div class="section-top"><div><div class="section-kicker">YOUR CAREER INSIGHTS</div><h2 id="report-title">岗位匹配报告</h2></div><button type="button" class="copy-button" id="copy-result">▢ 复制报告</button></div><p id="report-note" class="report-note"></p><div id="report-content"></div><p class="ai-note">AI 分析仅供求职参考，请结合实际经历判断；优化表达，不编造经历。</p><p id="copy-status" role="status"></p></section>
 <section class="how-section" id="how-it-works" aria-labelledby="how-title"><div class="how-header"><h2 id="how-title">好好准备，让机会更近一步</h2><p>简单三步，把模糊的「适不适合」变成清晰的行动。</p></div><div class="how-grid"><article><span>01 <i>↗</i></span><h3>放入真实经历</h3><p>粘贴去除敏感信息的简历，<br>让每一条建议都有据可依。</p></article><article><span>02 <i>⌕</i></span><h3>对照目标岗位</h3><p>加入完整的招聘要求，<br>聚焦这个机会真正需要的能力。</p></article><article><span>03 <i>✧</i></span><h3>带着方向去优化</h3><p>从优势、差距到下一步行动，<br>获得一份可执行的求职准备清单。</p></article></div></section>
+<dialog id="file-preview" aria-labelledby="preview-title"><div class="preview-head"><h2 id="preview-title">预览提取结果</h2><button type="button" id="close-preview" class="text-button">取消</button></div><p id="file-status" role="status"></p><p class="preview-notice">原文件不会上传。请核对识别错误，删除姓名、电话等敏感信息。确认后将替换对应输入框，仍需点击“开始分析”才会发送文本。</p><label for="preview-text">提取的文本（可编辑）</label><textarea id="preview-text" spellcheck="false" maxlength="200000"></textarea><p id="preview-count"></p><button type="button" id="confirm-file" class="primary-button" disabled>确认使用这段文本</button></dialog>
 </main>
 <footer><a class="brand footer-brand" href="/">JobFit <b>AI</b><span>让每一次投递更有方向</span></a><span>为认真准备的你而设计 <i>✦</i></span></footer>
 </body></html>

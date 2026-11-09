@@ -6,6 +6,29 @@
     "command": "npm run build"
   },
   "vars": {
-    "DIFY_API_URL": "https://api.dify.ai/v1"
-  }
+    "DIFY_API_URL": "https://api.dify.ai/v1",
+    "VISITOR_DAILY_LIMIT": "3",
+    "GLOBAL_DAILY_LIMIT": "30"
+  },
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "QUOTA_LEDGER",
+        "class_name": "QuotaLedger"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-quota-sqlite",
+      "new_sqlite_classes": [
+        "QuotaLedger"
+      ]
+    }
+  ]
 }

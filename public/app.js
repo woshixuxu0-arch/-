@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const titles = ['岗位匹配', '个人优势', '主要不足', '简历优化建议', '下一步行动'];
-let mode = 'mock', ready = false, controller, reportText = '', revision = 0;
+let mode = 'mock', ready = false, controller, reportText = '', revision = 0, importController, importTarget;
 const example = {
   resume: '【虚构示例，仅用于体验】\n求职方向：产品运营\n教育背景：本科，市场营销专业。\n实习经历：参与校园活动运营，负责活动文案撰写、用户反馈整理及周报制作。\n项目经历：参与校园二手交易社群维护，整理常见问题并协助改进新用户指引。\n技能：Excel 基础表格整理、中文文案写作。\n说明：以上为演示材料，不代表任何真实用户经历。',
   job_description: '【虚构示例岗位】产品运营助理\n岗位职责：参与用户运营与活动策划，收集用户反馈，协助整理业务数据并输出复盘。\n任职要求：具备良好的沟通与文案能力，能够使用 Excel 整理数据，主动推进任务。\n加分项：了解用户分层与基础数据分析。'
@@ -20,7 +20,7 @@ for (const [input, error] of [['resume','resume-error'],['job_description','job-
 $('fill-example').addEventListener('click', () => { if (controller) return; for (const key in example) $(key).value = example[key]; invalidate(); });
 function resetReport() { $('report').hidden = true; $('report-content').replaceChildren(); reportText = ''; $('copy-status').textContent = ''; }
 $('clear-all').addEventListener('click', () => {
-  controller?.abort(); for (const key in example) $(key).value = '';
+  controller?.abort(); importController?.abort(); for (const key in example) $(key).value = '';
   $('consent').checked = false; resetReport(); invalidate();
   for (const id of ['resume-error','job-error','global-error']) $(id).hidden = true;
   for (const id of ['resume','job_description']) $(id).removeAttribute('aria-invalid');
@@ -28,7 +28,7 @@ $('clear-all').addEventListener('click', () => {
 });
 $('cancel').addEventListener('click', () => controller?.abort());
 function busy(value) {
-  $('analyze').disabled = value || !ready; $('fill-example').disabled = value;
+  $('analyze').disabled = value || !ready || Boolean(importController); $('fill-example').disabled = value;
   $('loading-status').hidden = !value; $('analysis-form').setAttribute('aria-busy', String(value));
   $('button-label').textContent = value ? '正在分析…' : mode === 'mock' ? '开始演示分析' : '开始匹配分析';
 }
@@ -55,7 +55,7 @@ function renderReport(result, isMock) {
   $('report').hidden = false; $('report').focus({preventScroll:true}); $('report').scrollIntoView({behavior:'smooth', block:'start'});
 }
 $('analysis-form').addEventListener('submit', async event => {
-  event.preventDefault(); if (controller || !ready) return;
+  event.preventDefault(); if (controller || importController || !ready) return;
   let firstInvalid;
   for (const [input, error, label] of [['resume','resume-error','个人简历'],['job_description','job-error','岗位要求']]) {
     const length = $(input).value.trim().length;
@@ -79,7 +79,7 @@ $('analysis-form').addEventListener('submit', async event => {
   } catch(error) {
     $('global-error').textContent = controller.signal.aborted ? (controller.signal.reason === 'timeout' ? '分析超时，请稍后重试或缩短输入内容。' : '已取消本次分析，输入内容仍保留在当前页面。') : (error instanceof TypeError || error instanceof SyntaxError ? '网络连接异常，请检查网络后重试。' : error.message);
     $('global-error').hidden = false;
-  } finally { clearTimeout(timeout); controller = null; busy(false); }
+  } finally { clearTimeout(timeout); controller = null; busy(false); await loadUsage(); }
 });
 $('copy-result').addEventListener('click', async () => {
   try {
@@ -97,7 +97,8 @@ async function configure() {
     const response = await fetch('/api/config', {cache:'no-store'});
     if (!response.ok) throw new Error();
     const config = await response.json(); if (!['mock','live'].includes(config.mode)) throw new Error();
-    mode = config.mode; ready = true;
+    mode = config.mode; ready = mode === 'mock' || config.quotaProtected;
+    if(mode === 'live' && !ready) {$('global-error').textContent='额度保护尚未就绪，暂不能调用 AI。';$('global-error').hidden=false;}
     if (mode === 'live') {
       $('mode-badge').textContent = '● Dify 接入模式'; $('mode-badge').classList.add('live');
       $('mode-notice').querySelector('p').textContent = '已配置 Dify · 首次分析时验证连接。提交前请去除个人敏感信息，内容将发送至 Dify 与工作流模型服务。';
@@ -107,6 +108,52 @@ async function configure() {
     busy(false);
   } catch { $('global-error').textContent = '无法获取服务状态，请刷新页面重试。'; $('global-error').hidden = false; }
 }
-// 不使用 localStorage、sessionStorage、IndexedDB、cookie 或分析埋点。
+// 简历和文件不写浏览器持久存储；服务端仅设置 HttpOnly 匿名额度 Cookie。
 window.addEventListener('pageshow', event => { if (event.persisted) { for (const key in example) $(key).value = ''; resetReport(); counts(); } });
-counts(); configure();
+counts(); configure(); loadUsage();
+
+async function loadUsage() {
+  try {
+    const res=await fetch('/api/usage',{cache:'no-store'}),data=await res.json();
+    if(!res.ok) throw Error(data.error || '无法读取额度');
+    const q=data.quota;
+    $('quota-status').textContent=`你 / 当前网络剩余 ${q.visitorRemaining} / ${q.visitorLimit} 次 · 全站已用 ${q.globalUsed} / ${q.globalLimit} 次。北京时间每天 00:00 重置；失败或取消也占用已预留次数。`;
+  } catch(error) { $('quota-status').textContent=error.message || '额度暂不可用，请稍后刷新。'; }
+}
+$('refresh-quota').addEventListener('click',loadUsage);
+const preview=$('file-preview');
+function closeImport() {
+  importController?.abort();importController=null;preview.close();$('preview-text').value='';$('file-status').textContent='';busy(Boolean(controller));
+}
+$('close-preview').addEventListener('click',closeImport);
+preview.addEventListener('cancel',event=>{event.preventDefault();closeImport();});
+function previewCount() {
+  const length=$('preview-text').value.trim().length;
+  $('preview-count').textContent=`${length.toLocaleString()} / 20,000 字符${length>20000?'，请删减后确认':''}`;
+  $('confirm-file').disabled=Boolean(importController)||length<1||length>20000;
+}
+$('preview-text').addEventListener('input',previewCount);
+for(const button of document.querySelectorAll('[data-upload]')) {
+  const target=button.dataset.upload,input=$(target+'-file');
+  button.addEventListener('click',()=>{if(!controller && !importController)input.click();});
+  input.addEventListener('change',async()=>{
+    const file=input.files[0];input.value='';if(!file || controller || importController)return;
+    importTarget=target;const ownController=new AbortController();importController=ownController;
+    $('preview-text').value='';$('preview-text').disabled=true;$('confirm-file').disabled=true;
+    $('preview-title').textContent=target==='resume'?'导入个人简历':'导入岗位要求';
+    $('file-status').textContent='正在本地读取文件，请保持页面打开…';preview.showModal();busy(false);
+    const timeout=setTimeout(()=>ownController.abort(),120000);
+    try {
+      const {extractFile}=await import('./extract.js');
+      const result=await Promise.race([extractFile(file,{signal:ownController.signal,forceOCR:$(target+'-force-ocr').checked,onProgress:message=>{if(importController===ownController)$('file-status').textContent=message;}}),new Promise((_,reject)=>ownController.signal.addEventListener('abort',()=>reject(Error('已取消或提取超时，请使用更小的文件。')),{once:true}))]);
+      if(importController!==ownController)return;
+      if(!result.text.trim())throw Error('未提取到文字，请换清晰的文件，或直接粘贴文本。');
+      $('preview-text').value=result.text;$('file-status').textContent=`${result.method}完成。请预览、编辑后确认；OCR 可能存在错字。`;
+    } catch(error) {if(importController===ownController)$('file-status').textContent=error.message || '文件提取失败，请换文件或直接粘贴文本。';}
+    finally {clearTimeout(timeout);if(importController===ownController){importController=null;$('preview-text').disabled=false;previewCount();busy(Boolean(controller));}}
+  });
+}
+$('confirm-file').addEventListener('click',()=>{
+  if(importController || $('confirm-file').disabled)return;
+  $(importTarget).value=$('preview-text').value.trim();$(importTarget).dispatchEvent(new Event('input',{bubbles:true}));const target=$(importTarget);closeImport();target.focus();
+});
