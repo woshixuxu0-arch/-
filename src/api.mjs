@@ -60,9 +60,11 @@ export async function handleApi(request, env = {}, fetcher = fetch) {
   const abort = () => controller.abort(); request.signal.addEventListener('abort',abort,{once:true});
   try {
     const response = await fetcher(base.href.replace(/\/$/,'') + '/workflows/run', {
-      method:'POST', redirect:'error', headers:{Authorization:`Bearer ${env.DIFY_API_KEY}`, 'Content-Type':'application/json'},
+      // Workers 不支持 redirect:error。manual 同样禁止自动转发密钥到重定向目标。
+      method:'POST', redirect:'manual', headers:{Authorization:`Bearer ${env.DIFY_API_KEY}`, 'Content-Type':'application/json'},
       body:JSON.stringify({inputs:{resume:input.resume.trim(),job_description:input.job_description.trim()},response_mode:'blocking',user:crypto.randomUUID()}),signal:controller.signal
     });
+    if (response.status >= 300 && response.status < 400) return json({error:'Dify 地址返回了重定向，请管理员检查 API 基础地址。'},502);
     if (!response.ok) {
       if (response.status === 429) return json({error:'分析服务繁忙或已达额度，请稍后重试。'},429);
       if ([401,403].includes(response.status)) return json({error:'Dify 服务认证失败，请管理员检查服务端密钥。'},502);

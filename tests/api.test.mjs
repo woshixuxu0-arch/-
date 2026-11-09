@@ -13,7 +13,7 @@ test('拒绝声明及实际超限请求',async()=>{assert.equal((await handleApi
 test('错误 JSON 和 null 返回可理解错误',async()=>{for (const body of ['{', 'null']) {const r=await handleApi(new Request('https://jobfit.test/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body}),env);assert.equal(r.status,400);}});
 test('正确调用现有工作流的两个输入与 result 输出',async()=>{
   let called=0;
-  const r=await handleApi(post(),env,async(url,options)=>{called++;assert.equal(url,'https://api.dify.ai/v1/workflows/run');assert.equal(options.headers.Authorization,'Bearer test-server-secret');assert.equal(options.redirect,'error');const payload=JSON.parse(options.body);assert.deepEqual(payload.inputs,{resume:input.resume,job_description:input.job_description});assert.equal(payload.response_mode,'blocking');assert.ok(payload.user);return Response.json({data:{status:'succeeded',outputs:{result:JSON.stringify(mockReport)}}});});
+  const r=await handleApi(post(),env,async(url,options)=>{called++;assert.equal(url,'https://api.dify.ai/v1/workflows/run');assert.equal(options.headers.Authorization,'Bearer test-server-secret');assert.equal(options.redirect,'manual');const payload=JSON.parse(options.body);assert.deepEqual(payload.inputs,{resume:input.resume,job_description:input.job_description});assert.equal(payload.response_mode,'blocking');assert.ok(payload.user);return Response.json({data:{status:'succeeded',outputs:{result:JSON.stringify(mockReport)}}});});
   const output=await r.json();assert.equal(called,1);assert.deepEqual(output,{mode:'live',result:mockReport});
 });
 test('识别五个 Markdown 标题并保留内容',async()=>{const md=Object.entries(mockReport).map(([k,v])=>`## ${k}\n${v}`).join('\n');const r=await handleApi(post(),env,async()=>Response.json({data:{status:'succeeded',outputs:{result:md}}}));assert.deepEqual((await r.json()).result,mockReport);});
@@ -22,3 +22,16 @@ test('上游密钥、运行错误和内部响应不泄漏',async()=>{for (const 
 test('失败运行和缺失 result 不伪装为成功',async()=>{for(const data of [{status:'failed',error:'private'},{status:'succeeded',outputs:{}},{status:'succeeded',outputs:{result:{unrelated:'value'}}}]){const r=await handleApi(post(),env,async()=>Response.json({data}));assert.equal(r.status,502);assert.ok(!(await r.text()).includes('private'));}});
 test('拒绝不安全的服务端地址',async()=>{const r=await handleApi(post(),{...env,DIFY_API_URL:'http://api.dify.ai/v1'},()=>{throw Error();});assert.equal(r.status,503);});
 test('网络错误不泄漏底层异常详情',async()=>{const r=await handleApi(post(),env,()=>{throw Error('secret transport detail');});assert.equal(r.status,502);assert.ok(!(await r.text()).includes('secret'));});
+test('使用 Workers 支持的重定向模式，拒绝跟随跳转或暴露目标',async()=>{
+  for(const status of [301,302,307,308]) {
+    let calls=0;
+    const r=await handleApi(post(),env,async(url,options)=>{
+      calls++;
+      if(!['manual','follow'].includes(options.redirect)) throw new TypeError('Unsupported redirect mode');
+      assert.equal(options.redirect,'manual','密钥请求不得跟随重定向');
+      return new Response(null,{status,headers:{Location:'https://other.test/private-token'}});
+    });
+    assert.equal(calls,1);assert.equal(r.status,502);
+    const result=await r.json();assert.match(result.error,/重定向/);assert.ok(!JSON.stringify(result).includes('private-token'));
+  }
+});
