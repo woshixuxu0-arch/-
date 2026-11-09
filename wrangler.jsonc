@@ -1,0 +1,11 @@
+{
+  "name": "worker",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-01-01",
+  "build": {
+    "command": "npm run build"
+  },
+  "vars": {
+    "DIFY_API_URL": "https://api.dify.ai/v1"
+  }
+}

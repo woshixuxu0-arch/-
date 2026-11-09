@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2459e8"><meta name="description" content="JobFit AI 帮你梳理简历与岗位的匹配情况，发现优势、明确差距，准备下一步求职行动。">
+  <title>JobFit AI · 让每一次投递更有方向</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+<a class="skip" href="#workspace">跳转到简历分析</a>
+<header class="header"><div class="header-inner">
+  <a class="brand" href="/" aria-label="JobFit AI 首页"><span class="brand-icon">J<span>↗</span></span><span>JobFit <b>AI</b></span></a>
+  <nav aria-label="主导航"><a class="nav-active" href="#workspace">岗位匹配</a><a href="#how-it-works">使用指南</a></nav>
+  <span class="edition">求职成长工具 <i>✦</i></span>
+</div></header>
+<main>
+<section class="hero">
+  <div class="hero-copy"><div class="eyebrow"><span></span> 为下一份理想工作，做好准备</div>
+    <h1>你的经历，<br class="mobile-break">值得被<span class="hero-highlight">看见<svg viewBox="0 0 170 12" aria-hidden="true"><path d="M3 8 Q80 0 167 7"/></svg></span>。</h1>
+    <p>把简历与心仪岗位放在一起。<br>看清你的优势与差距，让每一次投递更有方向。</p>
+    <div class="hero-tags"><span>✓ 基于你提供的经历</span><span>✓ 可执行的优化建议</span><span>✓ 不保存简历</span></div>
+  </div>
+  <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+    <div class="float-dot dot-one"></div><div class="float-dot dot-two"></div>
+    <div class="mini-doc"><div class="doc-person"><div>人</div><span><i></i><i></i></span></div><div class="doc-rule"></div><i class="doc-line"></i><i class="doc-line short"></i><i class="doc-line"></i><div class="doc-pills"><b>经历</b><b>能力</b><b>潜力</b></div></div>
+    <div class="match-spark">✦</div><div class="mini-job"><span class="briefcase">▣</span><div><b>心仪的下一站</b><small>找到经历与机会的交点</small></div><span class="art-check">✓</span></div>
+    <span class="art-note">YOUR NEXT CHAPTER</span>
+  </div>
+</section>
+<section class="workspace" id="workspace" aria-labelledby="workspace-title">
+  <div class="section-top"><div><div class="section-kicker">CAREER WORKSPACE</div><h2 id="workspace-title">开启你的岗位匹配分析</h2></div><span class="mode-badge" id="mode-badge">○ 演示模式</span></div>
+  <div class="demo-notice" id="mode-notice"><span class="notice-icon">i</span><p><strong>当前为 Mock 演示</strong> · 尚未连接 Dify，报告仅展示结构示例，不代表对你个人的真实评估。</p></div>
+  <form id="analysis-form" novalidate>
+    <div class="input-grid">
+      <section class="input-card"><div class="card-heading"><div class="step-icon">01</div><div><label for="resume">个人简历</label><p>让 AI 了解你的经历与能力</p></div><button class="text-button" id="fill-example" type="button">填入示例 <span aria-hidden="true">↗</span></button></div>
+        <div class="textarea-wrap"><textarea id="resume" name="resume" placeholder="在这里粘贴你的简历内容…&#10;&#10;建议包含：&#10;• 工作 / 实习经历&#10;• 项目经历与个人贡献&#10;• 教育背景、技能与成果&#10;&#10;无需填写姓名、电话、身份证等敏感信息。" maxlength="20000" aria-describedby="resume-hint resume-error" spellcheck="false"></textarea><div class="input-footer"><span id="resume-hint">纯文本即可，建议先去除个人敏感信息</span><span id="resume-count">0 / 20,000</span></div></div><p id="resume-error" class="field-error" hidden></p>
+      </section>
+      <section class="input-card"><div class="card-heading"><div class="step-icon violet">02</div><div><label for="job_description">岗位要求</label><p>告诉 AI 你想去往的方向</p></div><span class="card-tag">JOB DESCRIPTION</span></div>
+        <div class="textarea-wrap"><textarea id="job_description" name="job_description" placeholder="在这里粘贴目标岗位的招聘描述…&#10;&#10;建议包含：&#10;• 岗位名称与工作职责&#10;• 必备技能与任职要求&#10;• 加分项与业务背景&#10;&#10;完整的岗位描述，有助于获得更有针对性的建议。" maxlength="20000" aria-describedby="job-hint job-error" spellcheck="false"></textarea><div class="input-footer"><span id="job-hint">越具体的岗位要求，越清晰的分析方向</span><span id="job-count">0 / 20,000</span></div></div><p id="job-error" class="field-error" hidden></p>
+      </section>
+    </div>
+    <div class="form-bottom"><div class="privacy-block"><span class="shield" aria-hidden="true">♧</span><div><strong>你的经历，只属于你</strong><p id="privacy-description">本应用不保存简历，刷新后清空；演示模式下内容不会发送到 Dify。</p></div></div><button type="button" class="clear-button" id="clear-all">清空内容</button></div>
+    <label class="consent" id="consent-row" hidden><input type="checkbox" id="consent">我同意将本次简历和岗位要求发送至 Dify 及工作流配置的模型服务，用于生成报告。请先移除敏感信息；第三方服务可能保留运行记录。</label>
+    <div class="submit-row"><p><span aria-hidden="true">✧</span> 从了解自己，到更有把握地出发</p><button class="primary-button" type="submit" id="analyze"><span aria-hidden="true">✦</span><span id="button-label">开始演示分析</span><span aria-hidden="true">→</span></button></div>
+    <p id="global-error" class="global-error" role="alert" hidden></p><div id="loading-status" class="loading-status" role="status" hidden><span class="spinner"></span><div><strong>正在梳理你的经历与岗位要求…</strong><p>请保持页面打开。真实分析可能需要 1–2 分钟。</p></div><button type="button" id="cancel" class="text-button">取消</button></div>
+  </form>
+</section>
+<section class="report" id="report" hidden aria-labelledby="report-title" tabindex="-1"><div class="section-top"><div><div class="section-kicker">YOUR CAREER INSIGHTS</div><h2 id="report-title">岗位匹配报告</h2></div><button type="button" class="copy-button" id="copy-result">▢ 复制报告</button></div><p id="report-note" class="report-note"></p><div id="report-content"></div><p class="ai-note">AI 分析仅供求职参考，请结合实际经历判断；优化表达，不编造经历。</p><p id="copy-status" role="status"></p></section>
+<section class="how-section" id="how-it-works" aria-labelledby="how-title"><div class="how-header"><h2 id="how-title">好好准备，让机会更近一步</h2><p>简单三步，把模糊的「适不适合」变成清晰的行动。</p></div><div class="how-grid"><article><span>01 <i>↗</i></span><h3>放入真实经历</h3><p>粘贴去除敏感信息的简历，<br>让每一条建议都有据可依。</p></article><article><span>02 <i>⌕</i></span><h3>对照目标岗位</h3><p>加入完整的招聘要求，<br>聚焦这个机会真正需要的能力。</p></article><article><span>03 <i>✧</i></span><h3>带着方向去优化</h3><p>从优势、差距到下一步行动，<br>获得一份可执行的求职准备清单。</p></article></div></section>
+</main>
+<footer><a class="brand footer-brand" href="/">JobFit <b>AI</b><span>让每一次投递更有方向</span></a><span>为认真准备的你而设计 <i>✦</i></span></footer>
+</body></html>
