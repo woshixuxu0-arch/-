@@ -34,6 +34,8 @@ try {
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));checks.push('390px 布局无横向溢出');
  async function upload(file,expected) {
    await page.locator('#resume-file').setInputFiles(file);
+   assert.equal(await page.locator('#file-preview').evaluate(el=>el.open),false,'选文件不应强制打开预览');
+   await page.locator('[data-preview="resume"]').click();
    await page.waitForFunction(()=>!document.querySelector('#preview-text').disabled && document.querySelector('#file-preview').open,{},{timeout:150000});
    const status=await page.locator('#file-status').textContent(),text=await page.locator('#preview-text').inputValue();
    assert.ok(text.length>20,`${file}: ${status}`);if(expected)assert.match(text,expected);if(file.endsWith('resume.png'))assert.match(text,/简历|图书|志愿/,'中文 OCR 应识别测试文本');
@@ -49,8 +51,8 @@ try {
  await upload(root+'/resume.png',/Resume|Library|assistant/i);
  await upload(root+'/scan.pdf',/Resume|Library|assistant/i);
  await page.locator('#resume-file').setInputFiles({name:'fake.pdf',mimeType:'application/pdf',buffer:Buffer.from('this is not a PDF')});
- await page.waitForFunction(()=>!document.querySelector('#preview-text').disabled);
- assert.match(await page.locator('#file-status').textContent(),/不是有效 PDF/);await page.locator('#close-preview').click();checks.push('伪装格式被拒绝');
+ await page.locator('#resume-error').waitFor({state:'visible'});
+ assert.match(await page.locator('#resume-error').textContent(),/不是有效 PDF/);assert.equal(await page.locator('#file-preview').evaluate(el=>el.open),false);checks.push('伪装格式被拒绝');
  assert.ok(requests.every(r=>new URL(r.url).origin===new URL(process.env.TEST_URL || 'http://127.0.0.1:3000/').origin),'解析组件不得请求第三方域名');
  assert.ok(requests.every(r=>r.method==='GET'),'文件提取期间不得 POST 文件或文本');
  assert.deepEqual(errors,[]);checks.push('提取仅请求同源静态组件，无文件 / 文本上传');
